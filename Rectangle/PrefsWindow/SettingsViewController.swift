@@ -49,6 +49,7 @@ class SettingsViewController: NSViewController {
     private var combinedDisplayModeCheckbox: NSButton?
     private var greenButtonOverrideCheckbox: NSButton?
     private var autoMaximizeCheckbox: NSButton?
+    private var halvesPreserveOtherAxisSizeCheckbox: NSButton?
     
     @IBAction func toggleLaunchOnLogin(_ sender: NSButton) {
         let newSetting: Bool = sender.state == .on
@@ -185,6 +186,10 @@ class SettingsViewController: NSViewController {
 
     @objc func toggleAutoMaximize(_ sender: NSButton) {
         Defaults.autoMaximize.enabled = sender.state == .on
+    }
+
+    @objc func toggleHalvesPreserveOtherAxisSize(_ sender: NSButton) {
+        Defaults.halvesPreserveOtherAxisSize.enabled = sender.state == .on
     }
 
     @IBAction func toggleTodoMode(_ sender: NSButton) {
@@ -1079,6 +1084,8 @@ class SettingsViewController: NSViewController {
 
         initializeAutoMaximizeCheckbox()
 
+        initializeHalvesPreserveOtherAxisSizeCheckbox()
+
         Notification.Name.configImported.onPost(using: {_ in
             self.initializeTodoModeSettings()
             self.initializeToggles()
@@ -1150,6 +1157,8 @@ class SettingsViewController: NSViewController {
         greenButtonOverrideCheckbox?.state = Defaults.greenButtonOverride.enabled ? .on : .off
 
         autoMaximizeCheckbox?.state = Defaults.autoMaximize.userDisabled ? .off : .on
+
+        halvesPreserveOtherAxisSizeCheckbox?.state = Defaults.halvesPreserveOtherAxisSize.enabled ? .on : .off
 
         if StageUtil.stageCapable {
             stageSlider.intValue = Int32(Defaults.stageSize.value)
@@ -1249,6 +1258,22 @@ class SettingsViewController: NSViewController {
 
             parentStack.insertArrangedSubview(checkbox, at: insertIdx + 1)
             autoMaximizeCheckbox = checkbox
+        }
+    }
+
+    private func initializeHalvesPreserveOtherAxisSizeCheckbox() {
+        if halvesPreserveOtherAxisSizeCheckbox == nil,
+           let parentStack = doubleClickTitleBarCheckbox.superview as? NSStackView,
+           let insertIdx = parentStack.arrangedSubviews.firstIndex(of: autoMaximizeCheckbox ?? doubleClickTitleBarCheckbox) {
+
+            let checkbox = NSButton(checkboxWithTitle: NSLocalizedString("Half actions preserve the window's size on the other axis", tableName: "Main", value: "", comment: ""), target: self, action: #selector(toggleHalvesPreserveOtherAxisSize(_:)))
+            checkbox.state = Defaults.halvesPreserveOtherAxisSize.enabled ? .on : .off
+            checkbox.toolTip = NSLocalizedString("Left Half then Top Half moves the window to the top left quarter; the action for the opposite edge expands it back.", tableName: "Main", value: "", comment: "")
+            checkbox.setContentCompressionResistancePriority(.required, for: .vertical)
+            checkbox.setContentHuggingPriority(.defaultHigh, for: .vertical)
+
+            parentStack.insertArrangedSubview(checkbox, at: insertIdx + 1)
+            halvesPreserveOtherAxisSizeCheckbox = checkbox
         }
     }
 

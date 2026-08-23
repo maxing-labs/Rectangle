@@ -11,9 +11,12 @@ import Foundation
 /// Along its own axis an action docks the window to its edge when the window spans the whole axis,
 /// expands the window to the whole axis when it is docked to the opposite edge, and cycles the window
 /// through the cycle sizes along that axis when it is already docked to that edge inside a quarter
-/// (if repeated commands resize; otherwise it leaves the window alone). Windows that are not tiled at
-/// all, and plain halves that get the same action again, behave exactly as without the feature
-/// (including cycling sizes or moving across displays on repeated executions).
+/// (if repeated commands resize; otherwise it leaves the window alone). One exception lets windows
+/// tile in three columns (or rows): a window that is docked to the opposite edge at two thirds of the
+/// axis shrinks to the middle third instead of expanding, so that Left Half, Left Half, Right Half
+/// parks the window in the center column, and Right Half then docks it to the right edge as usual.
+/// Windows that are not tiled at all, and plain halves that get the same action again, behave exactly
+/// as without the feature (including cycling sizes or moving across displays on repeated executions).
 ///
 /// Opt-in via the `halvesPreserveOtherAxisSize` default.
 enum HalvesPreserveOtherAxisSize {
@@ -24,6 +27,8 @@ enum HalvesPreserveOtherAxisSize {
         case full
         /// Docked to one edge. The rect carries the ungapped extent along that axis.
         case docked(HalfSplitSide, CGRect)
+        /// The middle third of the axis. The rect carries the ungapped extent along that axis.
+        case centered(CGRect)
     }
 
     enum Axis {
@@ -62,9 +67,17 @@ enum HalvesPreserveOtherAxisSize {
             } else {
                 newOwn = own
             }
-        case .docked:
-            // Docked to the opposite edge: expand along this axis.
-            newOwn = .full
+        case .docked(let dockedSide, let currentRect):
+            // Docked to the opposite edge: expand along this axis, except that a two thirds wide
+            // window shrinks to the middle third so that windows can tile in three columns or rows.
+            if matches(currentRect, dockedRect(along: axis, side: dockedSide, fraction: CycleSize.twoThirds.fraction, in: visibleFrame), along: axis) {
+                newOwn = .centered(centeredThirdRect(along: axis, in: visibleFrame))
+            } else {
+                newOwn = .full
+            }
+        case .centered:
+            // In the middle third: dock to the edge, like a window that spans the whole axis.
+            newOwn = .docked(side, dockedRect(along: axis, side: side, in: visibleFrame))
         }
 
         if axis == .horizontal {
@@ -77,7 +90,7 @@ enum HalvesPreserveOtherAxisSize {
 
     /// The state of `window` along `axis`: docked if its position and extent match (within tolerance)
     /// an edge-docked rect that Rectangle's half actions produce, at the active split ratio or any cycle
-    /// size, with or without gaps applied.
+    /// size, with or without gaps applied; centered if they match the middle third of the axis.
     static func axisState(of window: CGRect, along axis: Axis, in visibleFrame: CGRect) -> AxisState {
         guard !window.isNull, !visibleFrame.isNull, visibleFrame.width > 0, visibleFrame.height > 0 else {
             return .full
@@ -110,6 +123,19 @@ enum HalvesPreserveOtherAxisSize {
             }
         }
 
+        let centered = centeredThirdRect(along: axis, in: visibleFrame)
+        var centeredCandidates = [centered]
+        if gapSize > 0 {
+            centeredCandidates.append(GapCalculation.applyGaps(centered,
+                                                               dimension: axis == .horizontal ? .horizontal : .vertical,
+                                                               sharedEdges: axis == .horizontal ? [.left, .right] : [.top, .bottom],
+                                                               gapSize: gapSize,
+                                                               skipTopGap: Defaults.skipGapTopEdge.enabled))
+        }
+        if centeredCandidates.contains(where: { matches(window, $0, along: axis) }) {
+            return .centered(centered)
+        }
+
         return .full
     }
 
@@ -129,11 +155,11 @@ enum HalvesPreserveOtherAxisSize {
 
     private static func compose(horizontal: AxisState, vertical: AxisState, in visibleFrame: CGRect) -> RectResult {
         var rect = visibleFrame
-        if case .docked(_, let column) = horizontal {
+        if let column = horizontal.rect {
             rect.origin.x = column.minX
             rect.size.width = column.width
         }
-        if case .docked(_, let row) = vertical {
+        if let row = vertical.rect {
             rect.origin.y = row.minY
             rect.size.height = row.height
         }
@@ -146,10 +172,14 @@ enum HalvesPreserveOtherAxisSize {
             return RectResult(rect, resultingAction: .leftHalf)
         case (.docked(.trailing, _), .full):
             return RectResult(rect, resultingAction: .rightHalf)
+        case (.centered, .full):
+            return RectResult(rect, resultingAction: .centerThird, subAction: .centerVerticalThird)
         case (.full, .docked(.leading, _)):
             return RectResult(rect, resultingAction: .topHalf)
         case (.full, .docked(.trailing, _)):
             return RectResult(rect, resultingAction: .bottomHalf)
+        case (.full, .centered):
+            return RectResult(rect, resultingAction: .middleVerticalThird, subAction: .centerHorizontalThird)
         case (.docked(.leading, _), .docked(.leading, _)):
             return RectResult(rect, resultingAction: .topLeft, subAction: .topLeftQuarter)
         case (.docked(.trailing, _), .docked(.leading, _)):
@@ -158,6 +188,18 @@ enum HalvesPreserveOtherAxisSize {
             return RectResult(rect, resultingAction: .bottomLeft, subAction: .bottomLeftQuarter)
         case (.docked(.trailing, _), .docked(.trailing, _)):
             return RectResult(rect, resultingAction: .bottomRight, subAction: .bottomRightQuarter)
+        // Center column or middle row combined with a half: borrow the sixths and ninths that share
+        // the same edges, so gaps come out right.
+        case (.centered, .docked(.leading, _)):
+            return RectResult(rect, resultingAction: .topCenterSixth, subAction: .topCenterSixthLandscape)
+        case (.centered, .docked(.trailing, _)):
+            return RectResult(rect, resultingAction: .bottomCenterSixth, subAction: .bottomCenterSixthLandscape)
+        case (.docked(.leading, _), .centered):
+            return RectResult(rect, resultingAction: .middleLeftNinth, subAction: .middleLeftNinth)
+        case (.docked(.trailing, _), .centered):
+            return RectResult(rect, resultingAction: .middleRightNinth, subAction: .middleRightNinth)
+        case (.centered, .centered):
+            return RectResult(rect, resultingAction: .middleCenterNinth, subAction: .middleCenterNinth)
         }
     }
 
@@ -188,6 +230,21 @@ enum HalvesPreserveOtherAxisSize {
             : HalfSplitFrameCalculation.verticalRect(in: visibleFrame, side: side, fraction: fraction)
     }
 
+    /// The middle third of `visibleFrame` along `axis`, spanning the other axis (as Center Third and
+    /// Middle Vertical Third produce it).
+    private static func centeredThirdRect(along axis: Axis, in visibleFrame: CGRect) -> CGRect {
+        var rect = visibleFrame
+        switch axis {
+        case .horizontal:
+            rect.origin.x = visibleFrame.minX + floor(visibleFrame.width / 3.0)
+            rect.size.width = visibleFrame.width / 3.0
+        case .vertical:
+            rect.origin.y = visibleFrame.minY + floor(visibleFrame.height / 3.0)
+            rect.size.height = visibleFrame.height / 3.0
+        }
+        return rect
+    }
+
     private static func sharedEdge(along axis: Axis, side: HalfSplitSide) -> Edge {
         switch (axis, side) {
         case (.horizontal, .leading): return .right
@@ -209,6 +266,16 @@ enum HalvesPreserveOtherAxisSize {
         case .vertical:
             return abs(window.minY - candidate.minY) <= matchingTolerance
                 && abs(window.height - candidate.height) <= matchingTolerance
+        }
+    }
+}
+
+private extension HalvesPreserveOtherAxisSize.AxisState {
+    /// The ungapped rect along the axis, or nil when the window spans the whole axis.
+    var rect: CGRect? {
+        switch self {
+        case .full: return nil
+        case .docked(_, let rect), .centered(let rect): return rect
         }
     }
 }

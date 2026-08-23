@@ -97,6 +97,7 @@ By default, Left Half, Right Half, Top Half and Bottom Half always give the wind
 - Inside a quarter, the action for the opposite edge expands the window along that axis: Bottom Half takes a top left quarter back to Left Half, Right Half takes it to Top Half.
 - Inside a quarter, the action for the edge the window is docked to cycles the window through the cycle sizes along that axis and keeps the other one: Left Half takes a top left quarter to two thirds wide, then one third wide, while Top Half does the same to its height. This follows the setting for repeated commands; when it does not resize, the window stays as it is.
 - The same goes for halves: Right Half followed by Left Half fills the screen.
+- Except when the window is two thirds wide (or high): then the action for the opposite edge shrinks it to the middle third instead, so windows can tile in three columns: Left Half, Left Half, Right Half parks the window in the center column, and Right Half again docks it to the right edge. Top Half and Bottom Half keep a center column, just like any other column.
 - Windows that are not tiled, and halves that get their own action again, behave as usual (repeated executions still cycle sizes or move across displays, depending on the setting for repeated commands).
 
 ```bash

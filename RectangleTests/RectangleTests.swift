@@ -4365,6 +4365,115 @@ class HalvesPreserveOtherAxisSizeTests: XCTestCase {
         XCTAssertNil(tiled(.topHalf, from: CGRect(x: 10, y: 20, width: 560, height: 900)))
     }
 
+    // MARK: Two thirds shrinks to the middle third on the opposite action, so windows can tile in thirds
+
+    private let leftTwoThirds = CGRect(x: 10, y: 20, width: 800, height: 900)
+    private let rightTwoThirds = CGRect(x: 410, y: 20, width: 800, height: 900)
+    private let centerThird = CGRect(x: 410, y: 20, width: 400, height: 900)
+    private let topTwoThirds = CGRect(x: 10, y: 320, width: 1200, height: 600)
+    private let bottomTwoThirds = CGRect(x: 10, y: 20, width: 1200, height: 600)
+    private let middleThird = CGRect(x: 10, y: 320, width: 1200, height: 300)
+
+    func testRightHalfShrinksLeftTwoThirdsToCenterThird() {
+        assertTiled(.rightHalf, from: leftTwoThirds, gives: centerThird, as: .centerThird, subAction: .centerVerticalThird)
+    }
+
+    func testLeftHalfShrinksRightTwoThirdsToCenterThird() {
+        assertTiled(.leftHalf, from: rightTwoThirds, gives: centerThird, as: .centerThird, subAction: .centerVerticalThird)
+    }
+
+    func testBottomHalfShrinksTopTwoThirdsToMiddleThird() {
+        assertTiled(.bottomHalf, from: topTwoThirds, gives: middleThird, as: .middleVerticalThird, subAction: .centerHorizontalThird)
+    }
+
+    func testTopHalfShrinksBottomTwoThirdsToMiddleThird() {
+        assertTiled(.topHalf, from: bottomTwoThirds, gives: middleThird, as: .middleVerticalThird, subAction: .centerHorizontalThird)
+    }
+
+    func testOnlyTwoThirdsShrinksToTheMiddle() {
+        // One half and one third still expand, and so does three fourths.
+        assertTiled(.rightHalf, from: leftHalf, gives: visibleFrame, as: .maximize)
+        assertTiled(.rightHalf, from: CGRect(x: 10, y: 20, width: 400, height: 900), gives: visibleFrame, as: .maximize)
+        assertTiled(.rightHalf, from: CGRect(x: 10, y: 20, width: 900, height: 900), gives: visibleFrame, as: .maximize)
+        assertTiled(.bottomHalf, from: CGRect(x: 10, y: 620, width: 1200, height: 300), gives: visibleFrame, as: .maximize)
+    }
+
+    func testHalvesDockCenterThirdToTheirEdge() {
+        assertTiled(.rightHalf, from: centerThird, gives: rightHalf, as: .rightHalf)
+        assertTiled(.leftHalf, from: centerThird, gives: leftHalf, as: .leftHalf)
+        assertTiled(.bottomHalf, from: middleThird, gives: bottomHalf, as: .bottomHalf)
+        assertTiled(.topHalf, from: middleThird, gives: topHalf, as: .topHalf)
+    }
+
+    func testWalkingAcrossThreeColumns() {
+        // Left Half, Left Half park the window in the left two thirds; from there Right Half goes to the
+        // center column and Right Half again docks it to the right edge, where the usual cycling takes over.
+        assertTiled(.rightHalf, from: leftTwoThirds, gives: centerThird, as: .centerThird, subAction: .centerVerticalThird)
+        assertTiled(.rightHalf, from: centerThird, gives: rightHalf, as: .rightHalf)
+        XCTAssertNil(tiled(.rightHalf, from: rightHalf))
+    }
+
+    func testTopHalfKeepsCenterThirdColumn() {
+        assertTiled(.topHalf, from: centerThird,
+                    gives: CGRect(x: 410, y: 470, width: 400, height: 450), as: .topCenterSixth, subAction: .topCenterSixthLandscape)
+    }
+
+    func testBottomHalfKeepsCenterThirdColumn() {
+        assertTiled(.bottomHalf, from: centerThird,
+                    gives: CGRect(x: 410, y: 20, width: 400, height: 450), as: .bottomCenterSixth, subAction: .bottomCenterSixthLandscape)
+    }
+
+    func testLeftHalfKeepsMiddleThirdRow() {
+        assertTiled(.leftHalf, from: middleThird,
+                    gives: CGRect(x: 10, y: 320, width: 600, height: 300), as: .middleLeftNinth, subAction: .middleLeftNinth)
+    }
+
+    func testRightHalfKeepsMiddleThirdRow() {
+        assertTiled(.rightHalf, from: middleThird,
+                    gives: CGRect(x: 610, y: 320, width: 600, height: 300), as: .middleRightNinth, subAction: .middleRightNinth)
+    }
+
+    func testRightHalfShrinksTwoThirdsWideTopLeftQuarterToTopCenterSixth() {
+        assertTiled(.rightHalf, from: CGRect(x: 10, y: 470, width: 800, height: 450),
+                    gives: CGRect(x: 410, y: 470, width: 400, height: 450), as: .topCenterSixth, subAction: .topCenterSixthLandscape)
+    }
+
+    func testBottomHalfShrinksTopCenterSixthWithTwoThirdsHeightToMiddleCenterNinth() {
+        assertTiled(.bottomHalf, from: CGRect(x: 410, y: 320, width: 400, height: 600),
+                    gives: CGRect(x: 410, y: 320, width: 400, height: 300), as: .middleCenterNinth, subAction: .middleCenterNinth)
+    }
+
+    func testBottomHalfExpandsTopCenterSixthToCenterThird() {
+        assertTiled(.bottomHalf, from: CGRect(x: 410, y: 470, width: 400, height: 450),
+                    gives: centerThird, as: .centerThird, subAction: .centerVerticalThird)
+    }
+
+    func testRecognizesGappedCenterThird() {
+        Defaults.gapSize.value = 20
+        let gappedCenterThird = GapCalculation.applyGaps(centerThird, dimension: .both, sharedEdges: [.left, .right], gapSize: 20, skipTopGap: false)
+
+        assertTiled(.topHalf, from: gappedCenterThird,
+                    gives: CGRect(x: 410, y: 470, width: 400, height: 450), as: .topCenterSixth, subAction: .topCenterSixthLandscape)
+    }
+
+    func testRecognizesCenterThirdProducedByTheCenterThirdAction() {
+        let produced = WindowCalculationFactory.centerThirdCalculation.calculateRect(params(for: .centerThird, windowRect: visibleFrame)).rect
+
+        assertTiled(.topHalf, from: produced,
+                    gives: CGRect(x: 410, y: 470, width: 400, height: 450), as: .topCenterSixth, subAction: .topCenterSixthLandscape)
+    }
+
+    func testCenterHalfColumnIsStillNotRecognized() {
+        XCTAssertNil(tiled(.topHalf, from: CGRect(x: 310, y: 20, width: 600, height: 900)))
+    }
+
+    func testShrinkingToTheMiddleDoesNotDependOnRepeatedExecutionMode() {
+        for mode in [SubsequentExecutionMode.none, .acrossMonitor, .cycleMonitor] {
+            Defaults.subsequentExecutionMode.value = mode
+            assertTiled(.rightHalf, from: leftTwoThirds, gives: centerThird, as: .centerThird, subAction: .centerVerticalThird)
+        }
+    }
+
     // MARK: Helpers
 
     private func tiled(_ action: WindowAction, from windowRect: CGRect) -> RectResult? {

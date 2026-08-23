@@ -101,6 +101,21 @@ class WindowManager {
             }
         }
         
+        if let windowId {
+            if let preMaximizeRect = RepeatedMaximizeRestore.restoreRect(for: action,
+                                                                         windowRect: currentWindowRect,
+                                                                         lastAction: lastRectangleAction,
+                                                                         preMaximizeRect: AppDelegate.windowHistory.preMaximizeRects[windowId]) {
+                Logger.log("Repeated \(action.name) restores the window's previous frame")
+                frontmostWindowElement.setFrame(preMaximizeRect)
+                AppDelegate.windowHistory.lastRectangleActions.removeValue(forKey: windowId)
+                return
+            }
+            if RepeatedMaximizeRestore.applies(to: action) {
+                AppDelegate.windowHistory.preMaximizeRects[windowId] = currentWindowRect
+            }
+        }
+        
         if parameters.updateRestoreRect, let windowId {
             if AppDelegate.windowHistory.restoreRects[windowId] == nil
                 || windowMovedExternally {
